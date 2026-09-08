@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, cancelAttribution, fetchGameState, type GameState } from "../lib/api";
+import { ApiError, cancelAttribution, fetchGameState, resetGame, type GameState } from "../lib/api";
 import { isSessionExpired } from "../lib/session";
 import { useAuth } from "../session/AuthProvider";
 import { Participants } from "./Participants";
@@ -69,6 +69,28 @@ export function Overview() {
     [session, refresh, logout],
   );
 
+  const reset = useCallback(async () => {
+    if (!session) return;
+    if (
+      !window.confirm(
+        "Nouvelle partie : vider toutes les attributions ? Les participants et les couples seront conservés.",
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await resetGame(session);
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+      } else {
+        setError(err instanceof Error ? err.message : "réinitialisation impossible");
+      }
+    }
+  }, [session, refresh, logout]);
+
   if (!session) return null;
   if (loading) return <p>Chargement…</p>;
   if (error) return <p role="alert">{error}</p>;
@@ -113,6 +135,13 @@ export function Overview() {
               .join(" ; ")}
           </p>
         )}
+      </section>
+      <section>
+        <h2>Nouvelle partie</h2>
+        <p>Vide toutes les attributions pour repartir d'une nouvelle année.</p>
+        <button className="danger" onClick={reset}>
+          Nouvelle partie
+        </button>
       </section>
       <ForceDraw participants={players} onForced={refresh} />
       <Participants />

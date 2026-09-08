@@ -31,6 +31,10 @@ Supabase (variables `Deno.env`) — jamais commités :
   { giver_id }` → la cible retourne dans la réserve, le tireur peut retirer ;
   refus `422` (solvabilité, PSOLZ) si l'annulation plongerait la partie dans
   l'impasse.
+- `admin-reset-game` : nouvelle partie (ticket #8). `POST {}` → toutes les
+  attributions sont vidées, tout le monde repasse « pas encore tiré » ;
+  participants et couples sont conservés. Action destructive : le front demande
+  une confirmation avant d'appeler.
 - `participant-access` : accès participant par lien (ticket #4). `POST
   { link }` → `{ token }` (JWT `role=participant` porteur du lien, validité
   90 j). Le lien vaut identité : aucun compte ni mot de passe. Lien inconnu
@@ -40,6 +44,11 @@ Supabase (variables `Deno.env`) — jamais commités :
   cible de sa propre attribution). Ne lit que par le lien de la session : un
   lien régénéré → `401`, et un participant ne voit jamais les attributions des
   autres.
+- `participant-draw` : tirage du participant (ticket #9). `POST` avec
+  `Authorization: Bearer <token>` → le participant tire une cible dans la
+  réserve puis reçoit sa vue rafraîchie `{ participant }` (« tu offres à Y »).
+  Déjà tiré (PDRAW) → la vue courante est renvoyée ; impasse (PNONE) → `422`
+  avec le message ; lien obsolète → `401`.
 
 ## Tests
 

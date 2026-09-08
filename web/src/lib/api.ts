@@ -71,6 +71,30 @@ export async function fetchParticipantView(session: Session): Promise<Participan
   return data.participant;
 }
 
+export async function drawParticipant(session: Session): Promise<ParticipantInfo> {
+  const res = await fetch(functionUrl("participant-draw"), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  let data: { participant?: ParticipantInfo; error?: string };
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError("impossible de tirer", res.status);
+  }
+  if (!res.ok) {
+    throw new ApiError(data.error || "impossible de tirer", res.status);
+  }
+  if (!data.participant) {
+    throw new ApiError("réponse invalide du serveur", 500);
+  }
+  return data.participant;
+}
+
 export interface GameState {
   state: { total: number; drawn: number; remaining: number };
   players: { id: string; name: string; has_drawn: boolean }[];
@@ -214,5 +238,25 @@ export async function cancelAttribution(session: Session, giverId: string): Prom
   }
   if (!res.ok) {
     throw new ApiError(data.error || "annulation impossible", res.status);
+  }
+}
+
+export async function resetGame(session: Session): Promise<void> {
+  const res = await fetch(functionUrl("admin-reset-game"), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  let data: { error?: string };
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError("réponse invalide du serveur", res.status);
+  }
+  if (!res.ok) {
+    throw new ApiError(data.error || "réinitialisation impossible", res.status);
   }
 }

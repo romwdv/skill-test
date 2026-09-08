@@ -1,6 +1,6 @@
 import { serviceRoleConfig } from "../_shared/admin.ts";
 import { isAllowedOrigin, isPreflight, json, optionsResponse } from "../_shared/http.ts";
-import { requireParticipant } from "../_shared/participant.ts";
+import { fetchParticipantViewRow, requireParticipant } from "../_shared/participant.ts";
 
 // Vue personnelle du participant (ticket #4). Le JWT porteur (role=participant,
 // claim link) est vérifié ici ; la RPC participant_view ne lit que par ce lien.
@@ -27,21 +27,7 @@ export async function handleView(req: Request): Promise<Response> {
   const { url: supabaseUrl, headers } = config;
 
   try {
-    const res = await fetch(
-      `${supabaseUrl}/rest/v1/rpc/participant_view`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ p_link: identity.link }),
-      },
-    );
-    if (!res.ok) return json(req, { error: "base injoignable" }, 502);
-    const rows = await res.json() as {
-      id?: string;
-      name?: string;
-      has_drawn?: boolean;
-      target_name?: string | null;
-    }[];
+    const rows = await fetchParticipantViewRow(supabaseUrl, headers, identity.link);
     if (rows.length === 0 || typeof rows[0]?.id !== "string") {
       return json(req, { error: "lien invalide" }, 401);
     }

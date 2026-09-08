@@ -1,5 +1,6 @@
 import {
   ApiError,
+  drawParticipant,
   fetchParticipantView,
   participantAccess,
   type ParticipantInfo,
@@ -30,7 +31,9 @@ interface ParticipantContextValue {
   participant: ParticipantInfo | null;
   error: string | null;
   revoked: boolean;
+  drawing: boolean;
   identify: (link: string) => Promise<void>;
+  draw: () => Promise<void>;
   logout: () => void;
 }
 
@@ -53,6 +56,7 @@ export function ParticipantProvider({ children }: { children: ReactNode }): Reac
   const [participant, setParticipant] = useState<ParticipantInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revoked, setRevoked] = useState(false);
+  const [drawing, setDrawing] = useState(false);
   const [status, setStatus] = useState<Status>(hasStoredSessionOrUrlLink() ? "opening" : "idle");
 
   // Charge la vue du participant depuis une session valide. Une session dont le
@@ -100,12 +104,37 @@ export function ParticipantProvider({ children }: { children: ReactNode }): Reac
     [load],
   );
 
+  // Tirage du participant : le bouton de sa vue appelle l'Edge Function dédiée.
+  // La réponse rafraîchit la vue (« tu offres à Y » apparaît aussitôt). Une
+  // session dont le lien ne résout plus est traitée comme une révocation.
+  const draw = useCallback(async () => {
+    if (!session) return;
+    setError(null);
+    setDrawing(true);
+    try {
+      setParticipant(await drawParticipant(session));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession(PARTICIPANT_SESSION_KEY);
+        setSession(null);
+        setRevoked(true);
+        setError("Ce lien n'est plus valide : il a peut-être été régénéré.");
+        setStatus("invalid");
+      } else {
+        setError(err instanceof Error ? err.message : "tirage impossible");
+      }
+    } finally {
+      setDrawing(false);
+    }
+  }, [session]);
+
   const logout = useCallback(() => {
     clearSession(PARTICIPANT_SESSION_KEY);
     setSession(null);
     setParticipant(null);
     setError(null);
     setRevoked(false);
+    setDrawing(false);
     setStatus("idle");
   }, []);
 
@@ -131,8 +160,8 @@ export function ParticipantProvider({ children }: { children: ReactNode }): Reac
   }, []);
 
   const value = useMemo(
-    () => ({ status, session, participant, error, revoked, identify, logout }),
-    [status, session, participant, error, revoked, identify, logout],
+    () => ({ status, session, participant, error, revoked, drawing, identify, draw, logout }),
+    [status, session, participant, error, revoked, drawing, identify, draw, logout],
   );
 
   return <ParticipantContext.Provider value={value}>{children}</ParticipantContext.Provider>;

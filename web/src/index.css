@@ -1,0 +1,83 @@
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  background: #f5f3ef;
+  color: #222;
+}
+
+/* Vue participant : centrée, lisible et utilisable au pouce sur mobile.
+   Le tirage est l'action principale : un bouton large, bien au-dessus de la
+   taille tactile minimale de 44 px. */
+main.participant {
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+main.participant h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+main.participant p {
+  margin: 0;
+}
+
+main.participant .reveal {
+  font-size: 1.15rem;
+}
+
+main.participant button.draw {
+  display: block;
+  width: 100%;
+  margin: 0.75rem 0;
+  padding: 1.1rem 1rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #fff;
+  background: #9c3d99;
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+}
+
+main.participant button.draw:disabled {
+  opacity: 0.6;
+}
+
+main.participant button.logout {
+  margin-top: 0.5rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+/* Console admin : bouton destructif « Nouvelle partie ». */
+button.danger {
+  padding: 0.6rem 0.9rem;
+  font-weight: 600;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #b3261e;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}

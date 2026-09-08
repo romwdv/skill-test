@@ -9,8 +9,10 @@ import {
   regenerateParticipantLink,
   forceDraw,
   cancelAttribution,
+  resetGame,
   participantAccess,
   fetchParticipantView,
+  drawParticipant,
 } from "./api";
 import { fakeToken, PARTICIPANT_LINK } from "../test/helpers";
 
@@ -79,6 +81,33 @@ describe("adminLogin", () => {
   });
 });
 
+describe("resetGame", () => {
+  it("POSTs the reset endpoint with the bearer token", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ reset: true }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      await expect(resetGame(SESSION)).resolves.toBeUndefined();
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-reset-game");
+      expect(init.method).toBe("POST");
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("propagates a 422 ApiError when the server refuses the reset", async () => {
+    stubFetch(async () => jsonResponse({ error: "réinitialisation impossible" }, 422));
+    try {
+      await expect(resetGame(SESSION)).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 422,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
 describe("participantAccess", () => {
   it("posts the link and returns a session derived from the token", async () => {
     const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -133,6 +162,37 @@ describe("fetchParticipantView", () => {
     try {
       await expect(fetchParticipantView({ token: "bad", expiresAt: 1e12 })).rejects.toSatisfy(
         (err: unknown) => err instanceof ApiError && err.status === 401,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("drawParticipant", () => {
+  it("POSTs the draw endpoint and returns the refreshed view", async () => {
+    const expected = {
+      participant: { id: "p1", name: "Alice", has_drawn: true, target_name: "Bob" },
+    };
+    const fetchMock = vi.fn(async () => jsonResponse(expected));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const view = await drawParticipant(SESSION);
+      expect(view).toEqual(expected.participant);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/participant-draw");
+      expect(init.method).toBe("POST");
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("propagates the server message on a refused draw", async () => {
+    stubFetch(async () => jsonResponse({ error: "aucune cible valide" }, 422));
+    try {
+      await expect(drawParticipant(SESSION)).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 422,
       );
     } finally {
       restoreFetch();

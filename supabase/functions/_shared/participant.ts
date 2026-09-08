@@ -36,3 +36,31 @@ export async function requireParticipant(
   }
   return { id: claims.sub, link: claims.link };
 }
+
+export interface ParticipantViewRow {
+  id?: string;
+  name?: string;
+  has_drawn?: boolean;
+  target_name?: string | null;
+}
+
+// Charge la vue personnelle d'un participant par son lien, sous service role
+// (la lecture ne doit pas être filtrable par la RLS). Lève en cas de réponse
+// non-OK ; l'absence de ligne (lien régénéré, participant supprimé) relève du
+// handler — c'est la clé de la révocation.
+export async function fetchParticipantViewRow(
+  supabaseUrl: string,
+  headers: HeadersInit,
+  link: string,
+): Promise<ParticipantViewRow[]> {
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/rpc/participant_view`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ p_link: link }),
+    },
+  );
+  if (!res.ok) throw new Error("base injoignable");
+  return res.json() as Promise<ParticipantViewRow[]>;
+}

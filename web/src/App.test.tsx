@@ -29,8 +29,10 @@ vi.mock("./lib/api", async () => {
     regenerateParticipantLink: vi.fn(),
     forceDraw: vi.fn(),
     cancelAttribution: vi.fn(),
+    resetGame: vi.fn(),
     participantAccess: vi.fn(),
     fetchParticipantView: vi.fn(),
+    drawParticipant: vi.fn(),
   };
 });
 
@@ -43,8 +45,10 @@ import {
   regenerateParticipantLink,
   forceDraw,
   cancelAttribution,
+  resetGame,
   participantAccess,
   fetchParticipantView,
+  drawParticipant,
   ApiError,
 } from "./lib/api";
 
@@ -406,6 +410,175 @@ describe("App cancel attribution", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("insolvable");
     confirm.mockRestore();
+  });
+});
+
+describe("App reset game", () => {
+  function seedAndRender() {
+    seedValidSession();
+    return render(<App />);
+  }
+
+  async function showOverview() {
+    seedAndRender();
+    await summary();
+  }
+
+  it("resets the game after confirmation and refreshes the state", async () => {
+    vi.mocked(resetGame).mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.click(screen.getByRole("button", { name: "Nouvelle partie" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(resetGame)).toHaveBeenCalled();
+    });
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Nouvelle partie"));
+    await waitFor(() => {
+      expect(vi.mocked(fetchGameState)).toHaveBeenCalledTimes(2);
+    });
+    confirm.mockRestore();
+  });
+
+  it("does not reset when the confirmation is refused", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.click(screen.getByRole("button", { name: "Nouvelle partie" }));
+
+    expect(vi.mocked(resetGame)).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("shows the server error when the reset fails", async () => {
+    vi.mocked(resetGame).mockRejectedValue(new ApiError("base injoignable", 502));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.click(screen.getByRole("button", { name: "Nouvelle partie" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("base injoignable");
+    confirm.mockRestore();
+  });
+});
+
+describe("App participant draw", () => {
+  function seedTokens() {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    vi.mocked(participantAccess).mockResolvedValue({
+      token: fakeToken(exp, { role: "participant" }),
+      expiresAt: exp * 1000,
+    });
+  }
+
+  const UNDRAWN = Object.freeze({
+    id: "p2",
+    name: "Bob",
+    has_drawn: false,
+    target_name: null,
+  });
+
+  function seedUndrawn() {
+    vi.mocked(fetchParticipantView).mockResolvedValue(UNDRAWN);
+  }
+
+  it("offers a clear draw button while the participant is undrawn", async () => {
+    seedTokens();
+    seedUndrawn();
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+      expect(await screen.findByText(/pas encore tiré/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Tirer" })).toBeInTheDocument();
+      expect(screen.queryByText(/offres à/)).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("draws on click and immediately shows who the participant offers to", async () => {
+    seedTokens();
+    seedUndrawn();
+    vi.mocked(drawParticipant).mockResolvedValue({
+      id: "p2",
+      name: "Bob",
+      has_drawn: true,
+      target_name: "Carol",
+    });
+    const user = userEvent.setup();
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+      await screen.findByRole("button", { name: "Tirer" });
+      await user.click(screen.getByRole("button", { name: "Tirer" }));
+
+      expect(await screen.findByText(/offres à/)).toBeInTheDocument();
+      expect(screen.getByText("Carol")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Tirer" })).not.toBeInTheDocument();
+      expect(vi.mocked(drawParticipant)).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps the draw button on a reload after drawing: the view is authoritative", async () => {
+    seedTokens();
+    vi.mocked(fetchParticipantView).mockResolvedValue({
+      id: "p2",
+      name: "Bob",
+      has_drawn: true,
+      target_name: "Carol",
+    });
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+      expect(await screen.findByText(/offres à/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Tirer" })).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("shows the server message when the draw is refused and stays undrawn", async () => {
+    seedTokens();
+    seedUndrawn();
+    vi.mocked(drawParticipant).mockRejectedValue(new ApiError("aucune cible valide", 422));
+    const user = userEvent.setup();
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+      await screen.findByRole("button", { name: "Tirer" });
+      await user.click(screen.getByRole("button", { name: "Tirer" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("aucune cible valide");
+      expect(screen.getByRole("button", { name: "Tirer" })).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("revokes the session when the draw rejects it", async () => {
+    seedTokens();
+    seedUndrawn();
+    vi.mocked(drawParticipant).mockRejectedValue(new ApiError("lien invalide", 401));
+    const user = userEvent.setup();
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+      await screen.findByRole("button", { name: "Tirer" });
+      await user.click(screen.getByRole("button", { name: "Tirer" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Ce lien n'est plus valide");
+      await waitFor(() => {
+        expect(localStorage.getItem("ss_participant_session")).toBeNull();
+      });
+    } finally {
+      restore();
+    }
   });
 });
 
