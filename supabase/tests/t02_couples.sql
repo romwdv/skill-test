@@ -35,3 +35,45 @@ begin
 end $$;
 
 select test_assert((select count(*) from couples) = 1, 'only the canonical pair remains');
+
+-- Les couples sont des paires disjointes (ADR-0001) : la garantie de
+-- solvabilité du tirage (ticket #5) repose dessus. Un participant ne peut donc
+-- appartenir qu'à un seul couple.
+insert into participants (name, link) values
+  ('Carol', '33333333-3333-4333-8333-333333333333');
+
+do $$
+declare
+  alice uuid := (select id from participants where name = 'Alice');
+  bob   uuid := (select id from participants where name = 'Bob');
+  carol uuid := (select id from participants where name = 'Carol');
+begin
+  begin
+    insert into couples (participant_a_id, participant_b_id) values (alice, carol);
+    raise exception using errcode = 'TFAIL',
+      message = 'expected CDISJ: Alice is already coupled, insert succeeded';
+  exception when sqlstate 'CDISJ' then
+    null;
+  end;
+
+  begin
+    insert into couples (participant_a_id, participant_b_id) values (carol, alice);
+    raise exception using errcode = 'TFAIL',
+      message = 'expected CDISJ: Alice is already coupled (order swapped), insert succeeded';
+  exception when sqlstate 'CDISJ' then
+    null;
+  end;
+
+  begin
+    update couples
+       set participant_a_id = carol, participant_b_id = alice
+     where participant_a_id = alice and participant_b_id = bob;
+    raise exception using errcode = 'TFAIL',
+      message = 'expected CDISJ: updating a couple cannot overlap another';
+  exception when sqlstate 'CDISJ' then
+    null;
+  end;
+end $$;
+
+select test_assert((select count(*) from couples) = 1,
+  'overlapping couples are rejected, the canonical pair remains');
