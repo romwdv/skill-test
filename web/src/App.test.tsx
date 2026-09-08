@@ -27,6 +27,7 @@ vi.mock("./lib/api", async () => {
     addParticipant: vi.fn(),
     deleteParticipant: vi.fn(),
     regenerateParticipantLink: vi.fn(),
+    forceDraw: vi.fn(),
   };
 });
 
@@ -37,6 +38,7 @@ import {
   addParticipant,
   deleteParticipant,
   regenerateParticipantLink,
+  forceDraw,
   ApiError,
 } from "./lib/api";
 
@@ -249,5 +251,75 @@ describe("App participant management", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Mot de passe")).toBeInTheDocument();
     });
+  });
+});
+
+describe("App force draw", () => {
+  function seedAndRender() {
+    seedValidSession();
+    return render(<App />);
+  }
+
+  async function showOverview() {
+    seedAndRender();
+    await summary();
+  }
+
+  it("shows a forced badge on a forced attribution", async () => {
+    vi.mocked(fetchGameState).mockResolvedValue({
+      ...GAME_STATE,
+      attributions: [{ giver: "Alice", target: "Bob", forced: true }],
+    });
+    await showOverview();
+    expect(screen.getByText(/tirage forcé/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Alice a tiré Bob \(son couple\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show a forced badge on a normal attribution", async () => {
+    await showOverview();
+    expect(screen.queryByText(/tirage forcé/)).not.toBeInTheDocument();
+  });
+
+  it("forces a draw between the chosen giver and target", async () => {
+    vi.mocked(forceDraw).mockResolvedValue({ giver_id: "ids-bob", target_id: "ids-alice" });
+    const user = userEvent.setup();
+    await showOverview();
+
+    expect(screen.getByText("Forcer un tirage")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Tireur"), "ids-bob");
+    await user.selectOptions(screen.getByLabelText("Cible"), "ids-alice");
+    await user.click(screen.getByRole("button", { name: "Forcer le tirage" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(forceDraw)).toHaveBeenCalledWith(
+        expect.anything(),
+        "ids-bob",
+        "ids-alice",
+      );
+    });
+  });
+
+  it("only lists undrawn participants as possible givers", async () => {
+    await showOverview();
+    const giverSelect = screen.getByLabelText("Tireur") as HTMLSelectElement;
+    const options = Array.from(giverSelect.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).not.toContain("Alice");
+    expect(options).toContain("Bob");
+    expect(options).toContain("Carol");
+    expect(options).toContain("Dave");
+  });
+
+  it("shows the server error when the force is rejected", async () => {
+    vi.mocked(forceDraw).mockRejectedValue(new ApiError("pas un couple", 502));
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.selectOptions(screen.getByLabelText("Tireur"), "ids-bob");
+    await user.selectOptions(screen.getByLabelText("Cible"), "ids-alice");
+    await user.click(screen.getByRole("button", { name: "Forcer le tirage" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("pas un couple");
   });
 });

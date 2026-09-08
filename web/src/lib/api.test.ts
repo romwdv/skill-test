@@ -7,6 +7,7 @@ import {
   addParticipant,
   deleteParticipant,
   regenerateParticipantLink,
+  forceDraw,
 } from "./api";
 import { fakeToken } from "../test/helpers";
 
@@ -211,6 +212,36 @@ describe("regenerateParticipantLink", () => {
       expect(result.link).toBe(renewed.link);
       const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       expect(JSON.parse(String(init.body))).toEqual({ action: "regenerate", id: "p1" });
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("forceDraw", () => {
+  it("POSTs giver and target and returns the forced attribution", async () => {
+    const attribution = { giver_id: "g", target_id: "t" };
+    const fetchMock = vi.fn(async () => jsonResponse({ attribution }, 201));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const result = await forceDraw(SESSION, "g", "t");
+      expect(result).toEqual(attribution);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-force-draw");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ giver_id: "g", target_id: "t" });
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("propagates a 502 ApiError when the RPC fails", async () => {
+    stubFetch(async () => jsonResponse({ error: "forçage impossible" }, 502));
+    try {
+      await expect(forceDraw(SESSION, "g", "t")).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 502,
+      );
     } finally {
       restoreFetch();
     }

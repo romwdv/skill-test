@@ -19,7 +19,7 @@ links_for_round() {
 }
 
 "${PSQL[@]}" -d "$PGDATABASE" -v ON_ERROR_STOP=1 \
-  -c "truncate attributions, couples, participants;" >/dev/null
+  -c "truncate attributions, couples, participants, forced_attributions;" >/dev/null
 
 seed() {
   local round=$1 vals=()

@@ -40,7 +40,7 @@ export async function adminLogin(password: string): Promise<Session> {
 export interface GameState {
   state: { total: number; drawn: number; remaining: number };
   players: { id: string; name: string; has_drawn: boolean }[];
-  attributions: { giver: string; target: string }[];
+  attributions: { giver: string; target: string; forced?: boolean }[];
 }
 
 export async function fetchGameState(session: Session): Promise<GameState> {
@@ -130,4 +130,35 @@ export async function regenerateParticipantLink(
   const participant = (data as { participant?: Participant })?.participant;
   if (!participant) throw new ApiError("réponse invalide du serveur", 500);
   return participant;
+}
+
+export interface ForcedDraw {
+  giver_id: string;
+  target_id: string;
+}
+
+export async function forceDraw(
+  session: Session,
+  giverId: string,
+  targetId: string,
+): Promise<ForcedDraw> {
+  const res = await fetch(functionUrl("admin-force-draw"), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ giver_id: giverId, target_id: targetId }),
+  });
+  let data: { attribution?: ForcedDraw; error?: string };
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError("réponse invalide du serveur", res.status);
+  }
+  if (!res.ok) {
+    throw new ApiError(data.error || "forçage impossible", res.status);
+  }
+  if (!data.attribution) throw new ApiError("réponse invalide du serveur", 500);
+  return data.attribution;
 }

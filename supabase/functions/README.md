@@ -24,10 +24,13 @@ Supabase (variables `Deno.env`) — jamais commités :
   `POST { action: "delete", id }` → suppression (attributions/couples en
   cascade) ; `POST { action: "regenerate", id }` → l'ancien lien cesse de
   fonctionner, `200 { participant }` avec le nouveau lien.
+- `admin-force-draw` : forçage de couple (ticket #6), dernier recours quand le
+  tirage est bloqué. `POST { giver_id, target_id }` → `201 { attribution }`
+  (attribution marquée `forced` dans la vue admin, invisible des participants).
 
 ## Tests
 
-Le module JWT et les deux handlers sont testés avec `deno` (sans dépendance) :
+Le module JWT et les handlers sont testés avec `deno` (sans dépendance) :
 
 ```bash
 cd supabase/functions

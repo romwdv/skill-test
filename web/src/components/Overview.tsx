@@ -1,14 +1,35 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, fetchGameState, type GameState } from "../lib/api";
 import { isSessionExpired } from "../lib/session";
 import { useAuth } from "../session/AuthProvider";
 import { Participants } from "./Participants";
+import { ForceDraw } from "./ForceDraw";
 
 export function Overview() {
   const { session, logout } = useAuth();
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const cancelledRef = useRef(false);
+
+  const refresh = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchGameState(session);
+      if (!cancelledRef.current) setGame(data);
+    } catch (err) {
+      if (cancelledRef.current) return;
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+      } else {
+        setError(err instanceof Error ? err.message : "erreur de chargement");
+      }
+    } finally {
+      if (!cancelledRef.current) setLoading(false);
+    }
+  }, [session, logout]);
 
   useEffect(() => {
     if (!session) return;
@@ -16,28 +37,12 @@ export function Overview() {
       logout();
       return;
     }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchGameState(session)
-      .then((data) => {
-        if (!cancelled) setGame(data);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 401) {
-          logout();
-        } else {
-          setError(err instanceof Error ? err.message : "erreur de chargement");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    cancelledRef.current = false;
+    refresh();
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, [session, logout]);
+  }, [session, logout, refresh]);
 
   if (!session) return null;
   if (loading) return <p>Chargement…</p>;
@@ -65,14 +70,25 @@ export function Overview() {
           <p>Aucune attribution pour le moment.</p>
         ) : (
           <ul>
-            {attributions.map(({ giver, target }) => (
+            {attributions.map(({ giver, target, forced }) => (
               <li key={`${giver}-${target}`}>
                 {giver} offre à {target}
+                {forced && <strong> — tirage forcé (son couple)</strong>}
               </li>
             ))}
           </ul>
         )}
+        {attributions.some((a) => a.forced) && (
+          <p role="status">
+            Tirage forcé :{" "}
+            {attributions
+              .filter((a) => a.forced)
+              .map((a) => `${a.giver} a tiré ${a.target} (son couple)`)
+              .join(" ; ")}
+          </p>
+        )}
       </section>
+      <ForceDraw participants={players} onForced={refresh} />
       <Participants />
       <button onClick={logout}>Déconnexion</button>
     </main>

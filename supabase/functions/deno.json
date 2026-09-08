@@ -1,6 +1,6 @@
 {
   "tasks": {
     "test": "deno test --allow-env",
-    "check": "deno check admin-login/index.ts admin-game-state/index.ts admin-participants/index.ts _shared/*.ts"
+    "check": "deno check admin-login/index.ts admin-game-state/index.ts admin-participants/index.ts admin-force-draw/index.ts _shared/*.ts"
   }
 }

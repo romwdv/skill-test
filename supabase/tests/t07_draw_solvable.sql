@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 \i :tests/lib/assertions.sql
 
 -- Invariants vérifiés après un tirage complet.
@@ -62,7 +62,7 @@ declare
   i int;
 begin
   for i in 1..40 loop
-    truncate attributions, couples, participants;
+    truncate attributions, couples, participants, forced_attributions;
     insert into participants (name, link) values
       ('Alice', '11111111-1111-4111-8111-111111111111'),
       ('Bob',   '22222222-2222-4222-8222-222222222222'),
@@ -92,7 +92,7 @@ declare
   i int;
 begin
   for i in 1..20 loop
-    truncate attributions, couples, participants;
+    truncate attributions, couples, participants, forced_attributions;
     insert into participants (name, link) values
       ('Alice', '11111111-1111-4111-8111-111111111111'),
       ('Bob',   '22222222-2222-4222-8222-222222222222'),
@@ -120,7 +120,7 @@ declare
   i int;
 begin
   for i in 1..20 loop
-    truncate attributions, couples, participants;
+    truncate attributions, couples, participants, forced_attributions;
     insert into participants (name, link) values
       ('Alice', '11111111-1111-4111-8111-111111111111'),
       ('Bob',   '22222222-2222-4222-8222-222222222222'),
@@ -147,7 +147,7 @@ end $$;
 -- Les couples sont respectés TANT QU'UN tirage valide existe : quand aucun
 -- tirage valide n'existe (un couple sans assez de monde autour), draw() lève
 -- PNONE dès le premier tirage, sans jamais créer une attribution invalide.
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 insert into participants (name, link) values
   ('Alice', '11111111-1111-4111-8111-111111111111'),
   ('Bob',   '22222222-2222-4222-8222-222222222222'),
@@ -169,7 +169,7 @@ begin
   end;
 end $$;
 
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 insert into participants (name, link) values
   ('Alice', '11111111-1111-4111-8111-111111111111'),
   ('Bob',   '22222222-2222-4222-8222-222222222222');
@@ -190,7 +190,7 @@ begin
   end;
 end $$;
 
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 insert into participants (name, link) values
   ('Alice', '11111111-1111-4111-8111-111111111111');
 

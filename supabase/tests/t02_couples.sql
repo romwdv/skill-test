@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 \i :tests/lib/assertions.sql
 
 insert into participants (name, link) values

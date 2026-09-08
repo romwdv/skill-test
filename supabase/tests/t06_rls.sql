@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 \i :tests/lib/assertions.sql
 
 insert into participants (name, link) values
@@ -82,7 +82,7 @@ select test_assert((select count(*) from participants) = 3,
 -- Un participant tire via draw() avec le rôle authenticated : la chaîne
 -- security definer (draw -> draw_keeps_solvable -> couple_between) doit rester
 -- fonctionnelle malgré la révocation d'exécution sur les helpers.
-truncate attributions, couples, participants;
+truncate attributions, couples, participants, forced_attributions;
 insert into participants (name, link) values
   ('Alice', '11111111-1111-4111-8111-111111111111'),
   ('Bob',   '22222222-2222-4222-8222-222222222222'),
