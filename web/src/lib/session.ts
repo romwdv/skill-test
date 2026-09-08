@@ -1,4 +1,5 @@
-const STORAGE_KEY = "ss_admin_session";
+export const ADMIN_SESSION_KEY = "ss_admin_session";
+export const PARTICIPANT_SESSION_KEY = "ss_participant_session";
 
 export interface Session {
   token: string;
@@ -35,8 +36,8 @@ export function isSessionExpired(session: Session, now = Date.now()): boolean {
   return session.expiresAt <= now;
 }
 
-export function loadSession(): Session | null {
-  const stored = localStorage.getItem(STORAGE_KEY);
+export function loadSession(key = ADMIN_SESSION_KEY): Session | null {
+  const stored = localStorage.getItem(key);
   if (!stored) return null;
   try {
     const parsed: unknown = JSON.parse(stored);
@@ -46,7 +47,7 @@ export function loadSession(): Session | null {
       typeof session?.expiresAt !== "number" ||
       isSessionExpired(session as Session)
     ) {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(key);
       return null;
     }
     return session as Session;
@@ -55,10 +56,10 @@ export function loadSession(): Session | null {
   }
 }
 
-export function saveSession(session: Session): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+export function saveSession(session: Session, key = ADMIN_SESSION_KEY): void {
+  localStorage.setItem(key, JSON.stringify(session));
 }
 
-export function clearSession(): void {
-  localStorage.removeItem(STORAGE_KEY);
+export function clearSession(key = ADMIN_SESSION_KEY): void {
+  localStorage.removeItem(key);
 }

@@ -9,8 +9,10 @@ import {
   regenerateParticipantLink,
   forceDraw,
   cancelAttribution,
+  participantAccess,
+  fetchParticipantView,
 } from "./api";
-import { fakeToken } from "../test/helpers";
+import { fakeToken, PARTICIPANT_LINK } from "../test/helpers";
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -69,6 +71,67 @@ describe("adminLogin", () => {
     stubFetch(async () => jsonResponse({ error: "mot de passe invalide" }, 401));
     try {
       await expect(adminLogin("nope")).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 401,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("participantAccess", () => {
+  it("posts the link and returns a session derived from the token", async () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const token = fakeToken(exp, { role: "participant" });
+    const fetchMock = vi.fn(async () => jsonResponse({ token }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const session = await participantAccess(PARTICIPANT_LINK);
+      expect(session.token).toBe(token);
+      expect(session.expiresAt).toBe(exp * 1000);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/participant-access");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ link: PARTICIPANT_LINK });
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("throws a 401 ApiError with the server message on an invalid link", async () => {
+    stubFetch(async () => jsonResponse({ error: "lien inconnu" }, 401));
+    try {
+      await expect(participantAccess(PARTICIPANT_LINK)).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 401,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("fetchParticipantView", () => {
+  it("sends the session as a bearer token and returns the own view", async () => {
+    const expected = {
+      participant: { id: "p1", name: "Alice", has_drawn: true, target_name: "Bob" },
+    };
+    const fetchMock = vi.fn(async () => jsonResponse(expected));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const view = await fetchParticipantView({ token: "tok", expiresAt: 1e12 });
+      expect(view).toEqual(expected.participant);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/participant-view");
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("throws a 401 ApiError when the link no longer resolves", async () => {
+    stubFetch(async () => jsonResponse({ error: "lien invalide" }, 401));
+    try {
+      await expect(fetchParticipantView({ token: "bad", expiresAt: 1e12 })).rejects.toSatisfy(
         (err: unknown) => err instanceof ApiError && err.status === 401,
       );
     } finally {

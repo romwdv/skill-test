@@ -31,6 +31,15 @@ Supabase (variables `Deno.env`) — jamais commités :
   { giver_id }` → la cible retourne dans la réserve, le tireur peut retirer ;
   refus `422` (solvabilité, PSOLZ) si l'annulation plongerait la partie dans
   l'impasse.
+- `participant-access` : accès participant par lien (ticket #4). `POST
+  { link }` → `{ token }` (JWT `role=participant` porteur du lien, validité
+  90 j). Le lien vaut identité : aucun compte ni mot de passe. Lien inconnu
+  (ou régénéré) → `401` ; lien malformé → `400`.
+- `participant-view` : vue personnelle du participant (ticket #4). `GET` avec
+  `Authorization: Bearer <token>` → `{ participant }` (id, nom, a tiré ou non,
+  cible de sa propre attribution). Ne lit que par le lien de la session : un
+  lien régénéré → `401`, et un participant ne voit jamais les attributions des
+  autres.
 
 ## Tests
 

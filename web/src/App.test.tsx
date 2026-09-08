@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "./App";
-import { fakeToken, GAME_STATE, PARTICIPANTS } from "./test/helpers";
+import { fakeToken, GAME_STATE, PARTICIPANTS, PARTICIPANT_LINK } from "./test/helpers";
 
 async function summary(): Promise<HTMLElement> {
   return screen.findByText(
@@ -29,6 +29,8 @@ vi.mock("./lib/api", async () => {
     regenerateParticipantLink: vi.fn(),
     forceDraw: vi.fn(),
     cancelAttribution: vi.fn(),
+    participantAccess: vi.fn(),
+    fetchParticipantView: vi.fn(),
   };
 });
 
@@ -41,6 +43,8 @@ import {
   regenerateParticipantLink,
   forceDraw,
   cancelAttribution,
+  participantAccess,
+  fetchParticipantView,
   ApiError,
 } from "./lib/api";
 
@@ -57,6 +61,29 @@ function seedExpiredSession(): void {
     "ss_admin_session",
     JSON.stringify({ token: fakeToken(1), expiresAt: 1000 }),
   );
+}
+
+const PARTICIPANT_VIEW = Object.freeze({
+  id: "p1",
+  name: "Alice",
+  has_drawn: true,
+  target_name: "Bob",
+});
+
+function seedParticipantSession(): void {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  localStorage.setItem(
+    "ss_participant_session",
+    JSON.stringify({ token: fakeToken(exp, { role: "participant" }), expiresAt: exp * 1000 }),
+  );
+}
+
+function setSearch(search: string): () => void {
+  const restored = new URL(window.location.href);
+  window.history.pushState(null, "", `/${search}`);
+  return () => {
+    window.history.replaceState(null, "", restored.pathname);
+  };
 }
 
 beforeEach(() => {
@@ -379,5 +406,140 @@ describe("App cancel attribution", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("insolvable");
     confirm.mockRestore();
+  });
+});
+
+describe("App participant access by link", () => {
+  function seedTokens() {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    vi.mocked(participantAccess).mockResolvedValue({
+      token: fakeToken(exp, { role: "participant" }),
+      expiresAt: exp * 1000,
+    });
+  }
+
+  it("opens a private link from the URL, identifies the participant and shows their view", async () => {
+    seedTokens();
+    vi.mocked(fetchParticipantView).mockResolvedValue(PARTICIPANT_VIEW);
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+
+      expect(await screen.findByText("Alice")).toBeInTheDocument();
+      expect(screen.getByText(/offres à/)).toBeInTheDocument();
+      expect(screen.getByText("Bob")).toBeInTheDocument();
+      expect(participantAccess).toHaveBeenCalledWith(PARTICIPANT_LINK);
+      await waitFor(() => {
+        expect(window.location.search).toBe("");
+      });
+      const stored = JSON.parse(localStorage.getItem("ss_participant_session") ?? "");
+      expect(stored.token).toBeDefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it("does not leak other attributions in the participant view", async () => {
+    seedTokens();
+    vi.mocked(fetchParticipantView).mockResolvedValue({
+      ...PARTICIPANT_VIEW,
+      name: "Carol",
+      target_name: "Dave",
+    });
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+
+      await screen.findByText("Carol");
+      expect(screen.getByText("Dave")).toBeInTheDocument();
+      expect(screen.queryByText("Bob")).not.toBeInTheDocument();
+      expect(screen.queryByText("Alice offre à")).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Console admin" })).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("shows a hint when the participant has not drawn yet", async () => {
+    seedTokens();
+    vi.mocked(fetchParticipantView).mockResolvedValue({
+      id: "p2",
+      name: "Bob",
+      has_drawn: false,
+      target_name: null,
+    });
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+
+      expect(await screen.findByText(/pas encore tiré/)).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps the session after reload: the stored session is reused", async () => {
+    seedParticipantSession();
+    vi.mocked(fetchParticipantView).mockResolvedValue(PARTICIPANT_VIEW);
+    render(<App />);
+
+    await screen.findByText("Alice");
+    expect(participantAccess).not.toHaveBeenCalled();
+    expect(fetchParticipantView).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("ss_participant_session")).not.toBeNull();
+  });
+
+  it("revokes a stored session when the link has been regenerated", async () => {
+    seedParticipantSession();
+    vi.mocked(fetchParticipantView).mockRejectedValue(new ApiError("lien invalide", 401));
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ce lien n'est plus valide : il a peut-être été régénéré.",
+    );
+    expect(screen.getByText(/Demande un nouveau lien/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(localStorage.getItem("ss_participant_session")).toBeNull();
+    });
+  });
+
+  it("does not advise asking for a new link on a transient failure", async () => {
+    seedParticipantSession();
+    vi.mocked(fetchParticipantView).mockRejectedValue(new ApiError("base injoignable", 502));
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("base injoignable");
+    expect(screen.queryByText(/Demande un nouveau lien/)).not.toBeInTheDocument();
+  });
+
+  it("rejects an unknown link and does not store a session", async () => {
+    vi.mocked(participantAccess).mockRejectedValue(new ApiError("lien inconnu", 401));
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("lien inconnu");
+      expect(localStorage.getItem("ss_participant_session")).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("closes the participant session back to the entry screen", async () => {
+    seedTokens();
+    vi.mocked(fetchParticipantView).mockResolvedValue(PARTICIPANT_VIEW);
+    const user = userEvent.setup();
+    const restore = setSearch(`?link=${PARTICIPANT_LINK}`);
+    try {
+      render(<App />);
+      await screen.findByText("Alice");
+
+      await user.click(screen.getByRole("button", { name: "Fermer ma session" }));
+
+      expect(await screen.findByLabelText("Mot de passe")).toBeInTheDocument();
+      expect(localStorage.getItem("ss_participant_session")).toBeNull();
+    } finally {
+      restore();
+    }
   });
 });

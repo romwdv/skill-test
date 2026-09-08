@@ -2,12 +2,13 @@
 // répétait la même session admin (JWT role=admin) et la même config service role ;
 // c'est ici la source unique. Vérifications à temps constant héritées de jwt.ts.
 
-import { verifyToken } from "./jwt.ts";
+import { verifyToken, type TokenClaims } from "./jwt.ts";
 import { json } from "./http.ts";
 
-// Vérifie la session admin du porteur du JWT. Renvoie le json d'erreur à servir,
-// ou null si la session est valide.
-export async function requireAdmin(req: Request): Promise<Response | null> {
+// Vérifie la signature, l'expiration et la forme du JWT porteur (session admin
+// ou participant, selon le claim role). Renvoie les claims si valides, sinon le
+// json d'erreur à servir.
+export async function sessionClaims(req: Request): Promise<TokenClaims | Response> {
   const jwtSecret = Deno.env.get("ADMIN_JWT_SECRET");
   if (!jwtSecret) {
     return json(req, { error: "configuration serveur incomplète" }, 500);
@@ -18,9 +19,18 @@ export async function requireAdmin(req: Request): Promise<Response | null> {
     return json(req, { error: "session requise" }, 401);
   }
   try {
-    const claims = await verifyToken(jwtSecret, token);
-    if (claims.role !== "admin") throw new Error("not an admin session");
+    return await verifyToken(jwtSecret, token);
   } catch {
+    return json(req, { error: "session invalide" }, 401);
+  }
+}
+
+// Vérifie la session admin du porteur du JWT. Renvoie le json d'erreur à servir,
+// ou null si la session est valide.
+export async function requireAdmin(req: Request): Promise<Response | null> {
+  const claims = await sessionClaims(req);
+  if (claims instanceof Response) return claims;
+  if (claims.role !== "admin") {
     return json(req, { error: "session invalide" }, 401);
   }
   return null;

@@ -1,8 +1,10 @@
-export function fakeToken(exp: number): string {
+export function fakeToken(exp: number, claims: Record<string, unknown> = {}): string {
   const enc = (obj: unknown) =>
     btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  return `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ role: "admin", exp })}.signature`;
+  return `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ role: "admin", exp, ...claims })}.signature`;
 }
+
+export const PARTICIPANT_LINK = "11111111-1111-4111-8111-111111111111";
 
 export const GAME_STATE = {
   state: { total: 4, drawn: 1, remaining: 3 },

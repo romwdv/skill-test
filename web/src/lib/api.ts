@@ -15,11 +15,11 @@ export function functionUrl(name: string): string {
   return `${base.replace(/\/+$/, "")}/functions/v1/${name}`;
 }
 
-export async function adminLogin(password: string): Promise<Session> {
-  const res = await fetch(functionUrl("admin-login"), {
+async function authenticate(name: string, payload: unknown, fallback: string): Promise<Session> {
+  const res = await fetch(functionUrl(name), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify(payload),
   });
   let data: { token?: string; error?: string } = {};
   try {
@@ -28,13 +28,47 @@ export async function adminLogin(password: string): Promise<Session> {
     // réponse non-JSON : laissée tomber dans l'erreur générique
   }
   if (!res.ok) {
-    throw new ApiError(data.error || "connexion refusée", res.status);
+    throw new ApiError(data.error || fallback, res.status);
   }
   const session = sessionFromToken(data.token ?? "");
   if (!session) {
     throw new ApiError("réponse invalide du serveur", 500);
   }
   return session;
+}
+
+export async function adminLogin(password: string): Promise<Session> {
+  return authenticate("admin-login", { password }, "connexion refusée");
+}
+
+export interface ParticipantInfo {
+  id: string;
+  name: string;
+  has_drawn: boolean;
+  target_name: string | null;
+}
+
+export async function participantAccess(link: string): Promise<Session> {
+  return authenticate("participant-access", { link }, "lien refusé");
+}
+
+export async function fetchParticipantView(session: Session): Promise<ParticipantInfo> {
+  const res = await fetch(functionUrl("participant-view"), {
+    headers: { authorization: `Bearer ${session.token}` },
+  });
+  let data: { participant?: ParticipantInfo; error?: string };
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError("impossible de charger ta vue", res.status);
+  }
+  if (!res.ok) {
+    throw new ApiError(data.error || "impossible de charger ta vue", res.status);
+  }
+  if (!data.participant) {
+    throw new ApiError("réponse invalide du serveur", 500);
+  }
+  return data.participant;
 }
 
 export interface GameState {
