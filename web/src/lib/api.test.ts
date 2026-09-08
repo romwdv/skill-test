@@ -1,0 +1,114 @@
+import { adminLogin, fetchGameState, ApiError, functionUrl } from "./api";
+import { fakeToken } from "../test/helpers";
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+const ORIGINAL_FETCH = globalThis.fetch;
+const SUPABASE_URL = "https://project.supabase.co";
+
+beforeAll(() => {
+  process.env.VITE_SUPABASE_URL = SUPABASE_URL;
+  vi.stubEnv("VITE_SUPABASE_URL", SUPABASE_URL);
+});
+
+afterAll(() => {
+  delete process.env.VITE_SUPABASE_URL;
+  vi.unstubAllEnvs();
+});
+
+function stubFetch(impl: typeof fetch): void {
+  globalThis.fetch = impl;
+}
+
+function restoreFetch(): void {
+  globalThis.fetch = ORIGINAL_FETCH;
+}
+
+describe("functionUrl", () => {
+  it("appends the function path onto the Supabase URL", () => {
+    expect(functionUrl("admin-login")).toBe(`${SUPABASE_URL}/functions/v1/admin-login`);
+  });
+});
+
+describe("adminLogin", () => {
+  it("posts the password and returns a session derived from the token", async () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const token = fakeToken(exp);
+    const fetchMock = vi.fn(async () => jsonResponse({ token }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const session = await adminLogin("p4ss");
+      expect(session.token).toBe(token);
+      expect(session.expiresAt).toBe(exp * 1000);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-login");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ password: "p4ss" });
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("throws a 401 ApiError with the server message on bad password", async () => {
+    stubFetch(async () => jsonResponse({ error: "mot de passe invalide" }, 401));
+    try {
+      await expect(adminLogin("nope")).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 401,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("fetchGameState", () => {
+  it("sends the session as a bearer token and returns the state", async () => {
+    const expected = {
+      state: { total: 4, drawn: 1, remaining: 3 },
+      players: [
+        { name: "Alice", has_drawn: true },
+        { name: "Bob", has_drawn: false },
+      ],
+    };
+    const fetchMock = vi.fn(async () => jsonResponse(expected));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const state = await fetchGameState({ token: "tok", expiresAt: 1e12 });
+      expect(state).toEqual(expected);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-game-state");
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("throws a 401 ApiError when the server rejects the session", async () => {
+    stubFetch(async () => jsonResponse({ error: "session invalide" }, 401));
+    try {
+      await expect(fetchGameState({ token: "bad", expiresAt: 1e12 })).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 401,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("propagates network failures", async () => {
+    stubFetch(async () => {
+      throw new TypeError("network down");
+    });
+    try {
+      await expect(fetchGameState({ token: "t", expiresAt: 1e12 })).rejects.toThrow(
+        "network down",
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});

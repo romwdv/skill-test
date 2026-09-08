@@ -59,7 +59,12 @@ begin
   create role authenticated nologin nosuperuser noinherit;
 exception when duplicate_object then null;
 end $$;
-grant usage on schema public to anon, authenticated;
+do $$
+begin
+  create role service_role nologin nosuperuser noinherit bypassrls;
+exception when duplicate_object then null;
+end $$;
+grant usage on schema public to anon, authenticated, service_role;
 SQL
 }
 
