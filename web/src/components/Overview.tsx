@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, fetchGameState, type GameState } from "../lib/api";
+import { ApiError, cancelAttribution, fetchGameState, type GameState } from "../lib/api";
 import { isSessionExpired } from "../lib/session";
 import { useAuth } from "../session/AuthProvider";
 import { Participants } from "./Participants";
@@ -44,6 +44,31 @@ export function Overview() {
     };
   }, [session, logout, refresh]);
 
+  const cancel = useCallback(
+    async (giverId: string) => {
+      if (!session) return;
+      if (
+        !window.confirm(
+          "Annuler cette attribution ? La cible retournera dans la réserve et le tireur pourra retirer.",
+        )
+      ) {
+        return;
+      }
+      setError(null);
+      try {
+        await cancelAttribution(session, giverId);
+        await refresh();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          logout();
+        } else {
+          setError(err instanceof Error ? err.message : "annulation impossible");
+        }
+      }
+    },
+    [session, refresh, logout],
+  );
+
   if (!session) return null;
   if (loading) return <p>Chargement…</p>;
   if (error) return <p role="alert">{error}</p>;
@@ -70,10 +95,11 @@ export function Overview() {
           <p>Aucune attribution pour le moment.</p>
         ) : (
           <ul>
-            {attributions.map(({ giver, target, forced }) => (
+            {attributions.map(({ giver, target, forced, giver_id }) => (
               <li key={`${giver}-${target}`}>
                 {giver} offre à {target}
                 {forced && <strong> — tirage forcé (son couple)</strong>}
+                <button onClick={() => cancel(giver_id)}>Annuler</button>
               </li>
             ))}
           </ul>

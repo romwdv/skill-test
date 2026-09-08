@@ -40,7 +40,7 @@ export async function adminLogin(password: string): Promise<Session> {
 export interface GameState {
   state: { total: number; drawn: number; remaining: number };
   players: { id: string; name: string; has_drawn: boolean }[];
-  attributions: { giver: string; target: string; forced?: boolean }[];
+  attributions: { giver_id: string; target_id: string; giver: string; target: string; forced?: boolean }[];
 }
 
 export async function fetchGameState(session: Session): Promise<GameState> {
@@ -161,4 +161,24 @@ export async function forceDraw(
   }
   if (!data.attribution) throw new ApiError("réponse invalide du serveur", 500);
   return data.attribution;
+}
+
+export async function cancelAttribution(session: Session, giverId: string): Promise<void> {
+  const res = await fetch(functionUrl("admin-cancel-attribution"), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ giver_id: giverId }),
+  });
+  let data: { error?: string };
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError("réponse invalide du serveur", res.status);
+  }
+  if (!res.ok) {
+    throw new ApiError(data.error || "annulation impossible", res.status);
+  }
 }

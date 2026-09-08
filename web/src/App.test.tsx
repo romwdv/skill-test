@@ -28,6 +28,7 @@ vi.mock("./lib/api", async () => {
     deleteParticipant: vi.fn(),
     regenerateParticipantLink: vi.fn(),
     forceDraw: vi.fn(),
+    cancelAttribution: vi.fn(),
   };
 });
 
@@ -39,6 +40,7 @@ import {
   deleteParticipant,
   regenerateParticipantLink,
   forceDraw,
+  cancelAttribution,
   ApiError,
 } from "./lib/api";
 
@@ -268,7 +270,9 @@ describe("App force draw", () => {
   it("shows a forced badge on a forced attribution", async () => {
     vi.mocked(fetchGameState).mockResolvedValue({
       ...GAME_STATE,
-      attributions: [{ giver: "Alice", target: "Bob", forced: true }],
+      attributions: [
+        { giver_id: "ids-alice", target_id: "ids-bob", giver: "Alice", target: "Bob", forced: true },
+      ],
     });
     await showOverview();
     expect(screen.getByText(/tirage forcé/)).toBeInTheDocument();
@@ -321,5 +325,59 @@ describe("App force draw", () => {
     await user.click(screen.getByRole("button", { name: "Forcer le tirage" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("pas un couple");
+  });
+});
+
+describe("App cancel attribution", () => {
+  function seedAndRender() {
+    seedValidSession();
+    return render(<App />);
+  }
+
+  async function showOverview() {
+    seedAndRender();
+    await summary();
+  }
+
+  it("cancels an attribution after confirmation", async () => {
+    vi.mocked(cancelAttribution).mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(cancelAttribution)).toHaveBeenCalledWith(
+        expect.anything(),
+        "ids-alice",
+      );
+    });
+    confirm.mockRestore();
+  });
+
+  it("does not cancel when the confirmation is refused", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+
+    expect(vi.mocked(cancelAttribution)).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("shows the solvability error when the cancel is rejected", async () => {
+    vi.mocked(cancelAttribution).mockRejectedValue(
+      new ApiError("l'annulation rendrait la partie insolvable", 422),
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    await showOverview();
+
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("insolvable");
+    confirm.mockRestore();
   });
 });

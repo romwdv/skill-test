@@ -8,6 +8,7 @@ import {
   deleteParticipant,
   regenerateParticipantLink,
   forceDraw,
+  cancelAttribution,
 } from "./api";
 import { fakeToken } from "../test/helpers";
 
@@ -241,6 +242,34 @@ describe("forceDraw", () => {
     try {
       await expect(forceDraw(SESSION, "g", "t")).rejects.toSatisfy(
         (err: unknown) => err instanceof ApiError && err.status === 502,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("cancelAttribution", () => {
+  it("POSTs a cancel action with the giver id", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ cancelled: true }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      await expect(cancelAttribution(SESSION, "g-a")).resolves.toBeUndefined();
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-cancel-attribution");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ giver_id: "g-a" });
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("propagates the solvability error from the server", async () => {
+    stubFetch(async () => jsonResponse({ error: "l'annulation rendrait la partie insolvable" }, 422));
+    try {
+      await expect(cancelAttribution(SESSION, "g-a")).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 422,
       );
     } finally {
       restoreFetch();

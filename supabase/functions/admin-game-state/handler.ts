@@ -28,7 +28,7 @@ export async function handleGameState(req: Request): Promise<Response> {
   const queries = {
     state: `${supabaseUrl}/rest/v1/admin_game_state?select=*`,
     players: `${supabaseUrl}/rest/v1/admin_player_status?select=name,has_drawn&order=name.asc`,
-    attributions: `${supabaseUrl}/rest/v1/admin_attributions?select=giver,target&order=giver.asc`,
+    attributions: `${supabaseUrl}/rest/v1/admin_attributions?select=giver_id,target_id,giver,target,forced&order=giver.asc`,
   };
   try {
     const [stateRes, playersRes, attributionsRes] = await Promise.all(

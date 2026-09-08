@@ -12,7 +12,9 @@ export const GAME_STATE = {
     { id: "ids-carol", name: "Carol", has_drawn: false },
     { id: "ids-dave", name: "Dave", has_drawn: false },
   ],
-  attributions: [{ giver: "Alice", target: "Bob" }],
+  attributions: [
+    { giver_id: "ids-alice", target_id: "ids-bob", giver: "Alice", target: "Bob" },
+  ],
 };
 
 export const PARTICIPANTS = [

@@ -27,6 +27,10 @@ Supabase (variables `Deno.env`) — jamais commités :
 - `admin-force-draw` : forçage de couple (ticket #6), dernier recours quand le
   tirage est bloqué. `POST { giver_id, target_id }` → `201 { attribution }`
   (attribution marquée `forced` dans la vue admin, invisible des participants).
+- `admin-cancel-attribution` : annulation d'attribution (ticket #7). `POST
+  { giver_id }` → la cible retourne dans la réserve, le tireur peut retirer ;
+  refus `422` (solvabilité, PSOLZ) si l'annulation plongerait la partie dans
+  l'impasse.
 
 ## Tests
 
