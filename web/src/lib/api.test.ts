@@ -1,4 +1,13 @@
-import { adminLogin, fetchGameState, ApiError, functionUrl } from "./api";
+import {
+  adminLogin,
+  fetchGameState,
+  ApiError,
+  functionUrl,
+  fetchParticipants,
+  addParticipant,
+  deleteParticipant,
+  regenerateParticipantLink,
+} from "./api";
 import { fakeToken } from "../test/helpers";
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -107,6 +116,101 @@ describe("fetchGameState", () => {
       await expect(fetchGameState({ token: "t", expiresAt: 1e12 })).rejects.toThrow(
         "network down",
       );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+const SESSION = { token: "tok", expiresAt: 1e12 };
+const ALICE = {
+  id: "p1",
+  name: "Alice",
+  link: "11111111-1111-4111-8111-111111111111",
+  has_drawn: false,
+};
+
+describe("fetchParticipants", () => {
+  it("GETs the participants and returns them with their links", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ participants: [ALICE] }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const participants = await fetchParticipants(SESSION);
+      expect(participants).toHaveLength(1);
+      expect(participants[0].link).toBe(ALICE.link);
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-participants");
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("throws a 401 ApiError when the session is rejected", async () => {
+    stubFetch(async () => jsonResponse({ error: "session invalide" }, 401));
+    try {
+      await expect(fetchParticipants(SESSION)).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 401,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("addParticipant", () => {
+  it("POSTs an add action and returns the created participant", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ participant: ALICE }, 201));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const created = await addParticipant(SESSION, "Alice");
+      expect(created.name).toBe("Alice");
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toContain("/functions/v1/admin-participants");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ action: "add", name: "Alice" });
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("propagates a 400 ApiError when the name is missing", async () => {
+    stubFetch(async () => jsonResponse({ error: "nom requis" }, 400));
+    try {
+      await expect(addParticipant(SESSION, "")).rejects.toSatisfy(
+        (err: unknown) => err instanceof ApiError && err.status === 400,
+      );
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("deleteParticipant", () => {
+  it("POSTs a delete action with the id", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ deleted: true }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      await expect(deleteParticipant(SESSION, "p1")).resolves.toBeUndefined();
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(init.body))).toEqual({ action: "delete", id: "p1" });
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("regenerateParticipantLink", () => {
+  it("POSTs a regenerate action and returns the renewed participant", async () => {
+    const renewed = { ...ALICE, link: "99999999-9999-4999-8999-999999999999" };
+    const fetchMock = vi.fn(async () => jsonResponse({ participant: renewed }));
+    stubFetch(fetchMock as unknown as typeof fetch);
+    try {
+      const result = await regenerateParticipantLink(SESSION, "p1");
+      expect(result.link).toBe(renewed.link);
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(init.body))).toEqual({ action: "regenerate", id: "p1" });
     } finally {
       restoreFetch();
     }

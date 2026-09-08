@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, fetchGameState, type GameState } from "../lib/api";
 import { isSessionExpired } from "../lib/session";
 import { useAuth } from "../session/AuthProvider";
+import { Participants } from "./Participants";
 
 export function Overview() {
   const { session, logout } = useAuth();
@@ -72,6 +73,7 @@ export function Overview() {
           </ul>
         )}
       </section>
+      <Participants />
       <button onClick={logout}>Déconnexion</button>
     </main>
   );

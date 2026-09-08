@@ -18,6 +18,12 @@ Supabase (variables `Deno.env`) — jamais commités :
 - `admin-game-state` : `GET` avec `Authorization: Bearer <token>` → aperçu de la
   partie (`state` : total/tiré/reste ; `players` : qui a tiré, qui reste ;
   `attributions` : qui offre à qui).
+- `admin-participants` : gestion des participants (ticket #3). `GET` →
+  `{ participants }` (id, nom, lien privé, état tiré/non) pour copier chaque
+  lien. `POST { action: "add", name }` → `201 { participant }` ;
+  `POST { action: "delete", id }` → suppression (attributions/couples en
+  cascade) ; `POST { action: "regenerate", id }` → l'ancien lien cesse de
+  fonctionner, `200 { participant }` avec le nouveau lien.
 
 ## Tests
 

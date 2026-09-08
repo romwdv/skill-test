@@ -58,3 +58,76 @@ export async function fetchGameState(session: Session): Promise<GameState> {
   }
   return data;
 }
+
+export interface Participant {
+  id: string;
+  name: string;
+  link: string;
+  has_drawn: boolean;
+}
+
+export interface ParticipantList {
+  participants: Participant[];
+}
+
+async function participantsRequest(
+  session: Session,
+  init: RequestInit,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(functionUrl("admin-participants"), {
+    ...init,
+    headers: { authorization: `Bearer ${session.token}`, ...init.headers },
+  });
+  let data: Record<string, unknown> & { error?: string } = {};
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError("réponse invalide du serveur", res.status);
+  }
+  if (!res.ok) {
+    throw new ApiError(data.error || "action impossible", res.status);
+  }
+  return data;
+}
+
+export async function fetchParticipants(session: Session): Promise<Participant[]> {
+  const data = await participantsRequest(session, { method: "GET" });
+  const list = data as unknown as ParticipantList;
+  if (!Array.isArray(list.participants)) {
+    throw new ApiError("réponse invalide du serveur", 500);
+  }
+  return list.participants;
+}
+
+export async function addParticipant(session: Session, name: string): Promise<Participant> {
+  const data = await participantsRequest(session, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "add", name }),
+  });
+  const participant = (data as { participant?: Participant })?.participant;
+  if (!participant) throw new ApiError("réponse invalide du serveur", 500);
+  return participant;
+}
+
+export async function deleteParticipant(session: Session, id: string): Promise<void> {
+  await participantsRequest(session, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "delete", id }),
+  });
+}
+
+export async function regenerateParticipantLink(
+  session: Session,
+  id: string,
+): Promise<Participant> {
+  const data = await participantsRequest(session, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "regenerate", id }),
+  });
+  const participant = (data as { participant?: Participant })?.participant;
+  if (!participant) throw new ApiError("réponse invalide du serveur", 500);
+  return participant;
+}
