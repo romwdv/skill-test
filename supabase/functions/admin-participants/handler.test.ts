@@ -88,7 +88,10 @@ Deno.test("participants: GET lists participants with links", async () => {
       { id: "a", name: "Alice", link: "11111111-1111-4111-8111-111111111111", has_drawn: true },
       { id: "b", name: "Bob", link: "22222222-2222-4222-8222-222222222222", has_drawn: false },
     ];
-    makeListener({ admin_participants: { status: 200, body: rows } }, calls);
+    makeListener({
+      admin_participants: { status: 200, body: rows },
+      admin_couples: { status: 200, body: [] },
+    }, calls);
     try {
       const res = await handleParticipants(await authed());
       assert(res.status === 200, `expected 200, got ${res.status}`);
@@ -98,7 +101,7 @@ Deno.test("participants: GET lists participants with links", async () => {
         data.participants[0].link === "11111111-1111-4111-8111-111111111111",
         "the admin sees the private links",
       );
-      assert(calls.length === 1 && calls[0].url.includes("admin_participants"),
+      assert(calls.some((c) => c.url.includes("admin_participants")),
         "the admin_participants view is queried");
     } finally {
       restoreFetch();
@@ -236,6 +239,93 @@ Deno.test("participants: unknown action is a 400", async () => {
       }),
     );
     assert(res.status === 400, `expected 400, got ${res.status}`);
+  });
+});
+
+Deno.test("participants: GET includes the couples", async () => {
+  await withEnv(async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const rows = [
+      { id: "a", name: "Alice", link: "11111111-1111-4111-8111-111111111111", has_drawn: false },
+    ];
+    const couples = [
+      { participant_a_id: "a", participant_b_id: "b", a_name: "Alice", b_name: "Bob" },
+    ];
+    makeListener({
+      admin_participants: { status: 200, body: rows },
+      admin_couples: { status: 200, body: couples },
+    }, calls);
+    try {
+      const res = await handleParticipants(await authed());
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      const data = await res.json();
+      assert(data.participants.length === 1, "participants are mapped");
+      assert(data.couples.length === 1 && data.couples[0].a_name === "Alice",
+        "the couples are mapped");
+      assert(calls.some((c) => c.url.includes("admin_couples")),
+        "the admin_couples view is queried");
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+Deno.test("participants: couple.add calls the RPC and returns 201", async () => {
+  await withEnv(async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    makeListener({ admin_add_couple: { status: 204, body: null } }, calls);
+    try {
+      const token = await validToken();
+      const res = await handleParticipants(
+        new Request(`${URL}/admin-participants`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "couple.add", a: "a", b: "b" }),
+        }),
+      );
+      assert(res.status === 201, `expected 201, got ${res.status}`);
+      assert(calls.length === 1 && calls[0].url.includes("rpc/admin_add_couple")
+        && JSON.parse(String(calls[0].init.body)).p_a === "a"
+        && JSON.parse(String(calls[0].init.body)).p_b === "b",
+        "admin_add_couple RPC is called with both ids");
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+Deno.test("participants: couple.add with a missing id is a 400", async () => {
+  await withEnv(async () => {
+    const res = await handleParticipants(
+      new Request(`${URL}/admin-participants`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${await validToken()}` },
+        body: JSON.stringify({ action: "couple.add", a: "a" }),
+      }),
+    );
+    assert(res.status === 400, `expected 400, got ${res.status}`);
+  });
+});
+
+Deno.test("participants: couple.delete calls the RPC and returns 200", async () => {
+  await withEnv(async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    makeListener({ admin_delete_couple: { status: 204, body: null } }, calls);
+    try {
+      const token = await validToken();
+      const res = await handleParticipants(
+        new Request(`${URL}/admin-participants`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "couple.delete", a: "a", b: "b" }),
+        }),
+      );
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      assert(calls.length === 1 && calls[0].url.includes("rpc/admin_delete_couple"),
+        "admin_delete_couple RPC is called");
+    } finally {
+      restoreFetch();
+    }
   });
 });
 

@@ -4,6 +4,7 @@ import { isSessionExpired } from "../lib/session";
 import { useAuth } from "../session/AuthProvider";
 import { Participants } from "./Participants";
 import { ForceDraw } from "./ForceDraw";
+import { Couples } from "./Couples";
 
 export function Overview() {
   const { session, logout } = useAuth();
@@ -144,6 +145,7 @@ export function Overview() {
         </button>
       </section>
       <ForceDraw participants={players} onForced={refresh} />
+      <Couples participants={players} />
       <Participants />
       <button onClick={logout}>Déconnexion</button>
     </main>

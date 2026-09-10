@@ -88,7 +88,8 @@ export function Participants() {
   }
 
   async function copy(participant: Participant): Promise<void> {
-    await navigator.clipboard.writeText(participant.link).catch(() => undefined);
+    const link = `${window.location.origin}/?link=${encodeURIComponent(participant.link)}`;
+    await navigator.clipboard.writeText(link).catch(() => undefined);
     setCopiedId(participant.id);
     window.clearTimeout(copiedTimeout.current);
     copiedTimeout.current = window.setTimeout(() => setCopiedId(null), 1500);

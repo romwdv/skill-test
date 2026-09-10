@@ -48,7 +48,7 @@ export async function handleParticipants(req: Request): Promise<Response> {
   }
   const { url: supabaseUrl, headers } = config;
 
-  // GET : lister les participants avec leur lien et leur état.
+  // GET : lister les participants avec leur lien et leur état, et les couples.
   if (req.method === "GET") {
     try {
       const res = await fetch(
@@ -57,7 +57,13 @@ export async function handleParticipants(req: Request): Promise<Response> {
       );
       if (!res.ok) return json(req, { error: "base injoignable" }, 502);
       const rows = await res.json() as Row[];
-      return json(req, { participants: rows }, 200);
+      const couplesRes = await fetch(
+        `${supabaseUrl}/rest/v1/admin_couples?select=participant_a_id,participant_b_id,a_name,b_name&order=a_name.asc`,
+        { headers },
+      );
+      if (!couplesRes.ok) return json(req, { error: "base injoignable" }, 502);
+      const couples = await couplesRes.json() as Row[];
+      return json(req, { participants: rows, couples }, 200);
     } catch {
       return json(req, { error: "base injoignable" }, 502);
     }
@@ -98,6 +104,28 @@ export async function handleParticipants(req: Request): Promise<Response> {
     if (!rpc.ok) return json(req, { error: rpc.error ?? "régénération impossible" }, 502);
     if (!rpc.data) return json(req, { error: "participant inconnu" }, 404);
     return json(req, { participant: rpc.data }, 200);
+  }
+
+  if (action === "couple.add") {
+    const a = (body as { a?: unknown })?.a;
+    const b = (body as { b?: unknown })?.b;
+    if (typeof a !== "string" || typeof b !== "string" || !a || !b) {
+      return json(req, { error: "participants requis" }, 400);
+    }
+    const rpc = await callRpc(supabaseUrl, headers, "admin_add_couple", { p_a: a, p_b: b });
+    if (!rpc.ok) return json(req, { error: rpc.error ?? "ajout impossible" }, 502);
+    return json(req, { added: true }, 201);
+  }
+
+  if (action === "couple.delete") {
+    const a = (body as { a?: unknown })?.a;
+    const b = (body as { b?: unknown })?.b;
+    if (typeof a !== "string" || typeof b !== "string" || !a || !b) {
+      return json(req, { error: "participants requis" }, 400);
+    }
+    const rpc = await callRpc(supabaseUrl, headers, "admin_delete_couple", { p_a: a, p_b: b });
+    if (!rpc.ok) return json(req, { error: rpc.error ?? "suppression impossible" }, 502);
+    return json(req, { deleted: true }, 200);
   }
 
   return json(req, { error: "action inconnue" }, 400);

@@ -24,12 +24,15 @@ vi.mock("./lib/api", async () => {
     adminLogin: vi.fn(),
     fetchGameState: vi.fn(),
     fetchParticipants: vi.fn(),
+    fetchCouples: vi.fn(),
     addParticipant: vi.fn(),
     deleteParticipant: vi.fn(),
     regenerateParticipantLink: vi.fn(),
     forceDraw: vi.fn(),
     cancelAttribution: vi.fn(),
     resetGame: vi.fn(),
+    addCouple: vi.fn(),
+    deleteCouple: vi.fn(),
     participantAccess: vi.fn(),
     fetchParticipantView: vi.fn(),
     drawParticipant: vi.fn(),
@@ -40,12 +43,15 @@ import {
   adminLogin,
   fetchGameState,
   fetchParticipants,
+  fetchCouples,
   addParticipant,
   deleteParticipant,
   regenerateParticipantLink,
   forceDraw,
   cancelAttribution,
   resetGame,
+  addCouple,
+  deleteCouple,
   participantAccess,
   fetchParticipantView,
   drawParticipant,
@@ -95,6 +101,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchGameState).mockResolvedValue(GAME_STATE);
   vi.mocked(fetchParticipants).mockResolvedValue(PARTICIPANTS);
+  vi.mocked(fetchCouples).mockResolvedValue([]);
 });
 
 describe("App admin gate", () => {
@@ -208,7 +215,7 @@ describe("App participant management", () => {
       const buttons = within(section).getAllByRole("button", { name: "Copier le lien" });
       fireEvent.click(buttons[0]);
       await waitFor(() => {
-        expect(writeText).toHaveBeenCalledWith(PARTICIPANTS[0].link);
+        expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?link=${PARTICIPANTS[0].link}`);
       });
     } finally {
       if (clipboard) {
@@ -283,6 +290,56 @@ describe("App participant management", () => {
     seedAndRender();
     await waitFor(() => {
       expect(screen.getByLabelText("Mot de passe")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("App couples", () => {
+  function seedAndRender() {
+    seedValidSession();
+    return render(<App />);
+  }
+
+  async function showCouples() {
+    seedAndRender();
+    const section = await screen.findByText("Couples");
+    await waitFor(() => {
+      expect(vi.mocked(fetchCouples)).toHaveBeenCalled();
+    });
+    return section.closest("section");
+  }
+
+  it("lists existing couples", async () => {
+    vi.mocked(fetchCouples).mockResolvedValue([
+      { participant_a_id: "p1", participant_b_id: "p2", a_name: "Alice", b_name: "Bob" },
+    ]);
+    const section = (await showCouples())!;
+    expect(within(section).getByText(/Alice ne peut pas tirer Bob/)).toBeInTheDocument();
+  });
+
+  it("adds a couple and refreshes the list", async () => {
+    const user = userEvent.setup();
+    await showCouples();
+    await user.selectOptions(screen.getByLabelText("Participant A"), "ids-bob");
+    await user.selectOptions(screen.getByLabelText("Participant B"), "ids-carol");
+    await user.click(screen.getByRole("button", { name: "Ajouter le couple" }));
+    await waitFor(() => {
+      expect(vi.mocked(addCouple)).toHaveBeenCalledWith(expect.anything(), "ids-bob", "ids-carol");
+    });
+    await waitFor(() => {
+      expect(vi.mocked(fetchCouples)).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("removes a couple", async () => {
+    vi.mocked(fetchCouples).mockResolvedValue([
+      { participant_a_id: "ids-alice", participant_b_id: "ids-bob", a_name: "Alice", b_name: "Bob" },
+    ]);
+    const user = userEvent.setup();
+    const section = (await showCouples())!;
+    await user.click(within(section).getByRole("button", { name: "Retirer" }));
+    await waitFor(() => {
+      expect(vi.mocked(deleteCouple)).toHaveBeenCalledWith(expect.anything(), "ids-alice", "ids-bob");
     });
   });
 });

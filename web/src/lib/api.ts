@@ -128,6 +128,18 @@ export interface ParticipantList {
   participants: Participant[];
 }
 
+export interface Couple {
+  participant_a_id: string;
+  participant_b_id: string;
+  a_name: string;
+  b_name: string;
+}
+
+export interface ParticipantData {
+  participants: Participant[];
+  couples: Couple[];
+}
+
 async function participantsRequest(
   session: Session,
   init: RequestInit,
@@ -155,6 +167,31 @@ export async function fetchParticipants(session: Session): Promise<Participant[]
     throw new ApiError("réponse invalide du serveur", 500);
   }
   return list.participants;
+}
+
+export async function fetchCouples(session: Session): Promise<Couple[]> {
+  const data = await participantsRequest(session, { method: "GET" });
+  const list = data as unknown as ParticipantData;
+  if (!Array.isArray(list.couples)) {
+    throw new ApiError("réponse invalide du serveur", 500);
+  }
+  return list.couples;
+}
+
+export async function addCouple(session: Session, a: string, b: string): Promise<void> {
+  await participantsRequest(session, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "couple.add", a, b }),
+  });
+}
+
+export async function deleteCouple(session: Session, a: string, b: string): Promise<void> {
+  await participantsRequest(session, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "couple.delete", a, b }),
+  });
 }
 
 export async function addParticipant(session: Session, name: string): Promise<Participant> {
